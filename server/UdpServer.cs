@@ -11,86 +11,142 @@ namespace server
 {
     public class UdpServer
     {
-        private readonly UdpClient udpClient;
-        private readonly List<ClientInfo> clients = new List<ClientInfo>();
-        private readonly object locker = new object();
         private readonly int port;
+        private readonly UdpClient udp;
+        private readonly List<ClientInfo> clients = new();
+        private readonly object locker = new();
 
         public UdpServer(int port)
         {
             this.port = port;
-            udpClient = new UdpClient(port);
+            udp = new UdpClient(port);
         }
-
 
         public async Task StartAsync()
         {
-            Console.WriteLine($"UDP сервер запущен и ожидает подключения на порту {port}...");
+            Console.WriteLine($"UDP сервер слушает порт {port}.");
             while (true)
             {
+                UdpReceiveResult result;
                 try
                 {
-                    UdpReceiveResult result = await udpClient.ReceiveAsync();
-                    var clientEndPoint = result.RemoteEndPoint;
-                    string message = Encoding.UTF8.GetString(result.Buffer);
-                    _ = HandleClientMessageAsync(clientEndPoint, message);
+                    result = await udp.ReceiveAsync();
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Ошибка при получении данных: {ex.Message}");
+                    Console.WriteLine($"Ошибка при получении пакета: {ex.Message}");
+                    continue;
                 }
+
+                var remote = result.RemoteEndPoint;
+                var message = Encoding.UTF8.GetString(result.Buffer);
+
+                _ = ReceivedMessage(remote, message);
             }
         }
 
-
-        private async Task HandleClientMessageAsync(IPEndPoint sender, string message)
+        private async Task ReceivedMessage(IPEndPoint sender, string message)
         {
-            if (message.StartsWith("HELLO:"))
+            if (string.IsNullOrWhiteSpace(message))
+            { 
+                return; 
+            }
+
+            if (message.StartsWith("HELLO:", StringComparison.Ordinal))
             {
-                string name = message.Substring(6).Trim();
+                var name = message.Substring(6).Trim();
+                bool added = false;
+
                 lock (locker)
                 {
                     if (!clients.Any(c => c.EndPoint.Equals(sender)))
                     {
                         clients.Add(new ClientInfo(name, sender));
-                        Console.WriteLine($"{name} подключился.");
-                        Broadcast($"{name} ONLINE", sender);
+                        added = true;
                     }
                 }
+
+                if (added)
+                {
+                    Console.WriteLine($"{name} подключился ({sender}).");
+                    await SendMessage($"{name} ONLINE");
+                }
+                else
+                {
+                    return;
+                }
+                
             }
-            else if (message.StartsWith("BYE:")) 
+
+            if (message.StartsWith("BYE:", StringComparison.Ordinal))
             {
-                string name = message.Substring(4).Trim();
+                var name = message.Substring(4).Trim();
+                bool removed = false;
+
                 lock (locker)
                 {
                     var client = clients.FirstOrDefault(c => c.EndPoint.Equals(sender));
                     if (client != null)
                     {
                         clients.Remove(client);
-                        Console.WriteLine($"{name} отключился.");
-                        Broadcast($"{name} OFFLINE", sender);
+                        removed = true;
                     }
                 }
+
+                if (removed)
+                {
+                    Console.WriteLine($"{name} отключился ({sender}).");
+                    await SendMessage($"{name} OFFLINE");
+                }
+                else
+                {
+                    return;
+                }
             }
-            else 
+
+            if (message.StartsWith("MSG:", StringComparison.Ordinal))
             {
-                Console.WriteLine($"Сообщение от {sender}: {message}");
-                Broadcast(message, sender);
+                var parts = message.Split(':', 3);
+                if (parts.Length == 3)
+                {
+                    var name = parts[1];
+                    var text = parts[2];
+
+                    Console.WriteLine($"[{name}] : {text}");
+                    await SendMessage($"MSG:{name}:{text}");
+                    return;
+                }
+                else
+                {
+                    Console.WriteLine($"Неверный формат MSG от {sender}: {message}");
+                    return;
+                }
+            }
+            else
+            {
+                Console.WriteLine($"Неизвестный пакет от {sender}: {message}");
             }
         }
 
-
-        private void Broadcast(string message, IPEndPoint sender)
+        private async Task SendMessage(string message)
         {
-            byte[] data = Encoding.UTF8.GetBytes(message);
+            byte[] payload = Encoding.UTF8.GetBytes(message);
+            List<IPEndPoint> targets;
+
             lock (locker)
             {
-                foreach (var client in clients)
+                targets = clients.Select(c => c.EndPoint).ToList();
+            }
+
+            foreach (var endpoint in targets)
+            {
+                try
                 {
-                    if (!client.EndPoint.Equals(sender))
-                    {
-                        udpClient.SendAsync(data, data.Length, client.EndPoint);
-                    }
+                    await udp.SendAsync(payload, payload.Length, endpoint);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Ошибка рассылки {endpoint}: {ex.Message}");
                 }
             }
         }

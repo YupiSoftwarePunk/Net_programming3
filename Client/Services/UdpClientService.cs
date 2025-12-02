@@ -26,21 +26,27 @@ namespace Client.Model
 
         public async Task ConnectAsync()
         {
-            await SendMessage($"HELLO:{userName}");
+            await SendRawMessage($"HELLO:{userName}");
             _ = Task.Run(ReceiveMessage);
         }
 
         public async Task DisconnectAsync()
         {
-            await SendMessage($"BYE:{userName}");
+            await SendRawMessage($"BYE:{userName}");
             udpClient.Close();
+        }
+
+
+        public async Task SendRawMessage(string message)
+        {
+            byte[] data = Encoding.UTF8.GetBytes(message);
+            await udpClient.SendAsync(data, data.Length, serverEndPoint);
         }
 
 
         public async Task SendMessage(string message)
         {
-            byte[] data = Encoding.UTF8.GetBytes(message);
-            await udpClient.SendAsync(data, data.Length, serverEndPoint);
+            await SendRawMessage($"MSG:{userName}:{message}");
         }
 
 
@@ -52,7 +58,7 @@ namespace Client.Model
                 {
                     var result = await udpClient.ReceiveAsync();
                     string msg = Encoding.UTF8.GetString(result.Buffer);
-                    //MessageReceived?.Invoke(msg);
+                    MessageReceived?.Invoke(msg);
                 }
                 catch
                 {

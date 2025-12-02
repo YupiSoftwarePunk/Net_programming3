@@ -25,6 +25,7 @@ namespace Client.View
 
         private readonly UdpClientService udpService;
         private int onlineUsers;
+        private readonly string userName;
 
         public ObservableCollection<string> Messages { get; } = new();
         public ICommand SendMessageCommand { get; }
@@ -41,7 +42,8 @@ namespace Client.View
             InitializeComponent();
             DataContext = this;
 
-            udpService = new UdpClientService("192.168.31.146", 8080, Environment.UserName);
+            userName = Guid.NewGuid().ToString().Substring(0, 5);
+            udpService = new UdpClientService("192.168.31.146", 8080, userName);
             udpService.MessageReceived += OnMessageReceived;
             _ = udpService.ConnectAsync();
 
@@ -50,8 +52,11 @@ namespace Client.View
                 if (!string.IsNullOrWhiteSpace(MessageInput))
                 {
                     await udpService.SendMessage(MessageInput);
-                    Messages.Add($"Мое сообщение: {MessageInput}");
-                    MessageInput = "";
+                    Dispatcher.Invoke(() =>
+                    {
+                        Messages.Add($"Мое сообщение: {MessageInput}");
+                        MessageInput = "";
+                    });
                     OnPropertyChanged(nameof(MessageInput));
                 }
             });
@@ -67,7 +72,7 @@ namespace Client.View
 
         private void OnMessageReceived(string message)
         {
-            Application.Current.Dispatcher.Invoke(() =>
+            Dispatcher.Invoke(() =>
             {
                 Messages.Add(message);
 
@@ -79,6 +84,30 @@ namespace Client.View
                 {
                     OnlineUsers = Math.Max(0, OnlineUsers - 1);
                 }
+                else if (message.StartsWith("MSG:"))
+                {
+                    var parts = message.Split(':', 3);
+                    if (parts.Length == 3)
+                    {
+                        string sender = parts[1];
+                        string content = parts[2];
+
+                        if (sender == userName)
+                        {
+                            Messages.Add($"Я: {content}");
+                        }
+
+                        else
+                        {
+                            Messages.Add($"{sender}: {content}");
+                        }
+                    }
+                }
+                else
+                {
+                    Messages.Add(message); 
+                }
+
             });
         }
 
@@ -98,8 +127,11 @@ namespace Client.View
             if (!string.IsNullOrWhiteSpace(MessageInput))
             {
                 _ = udpService.SendMessage(MessageInput);
-                Messages.Add($"Мое сообщение: {MessageInput}");
-                MessageInput = "";
+                Dispatcher.Invoke(() =>
+                {
+                    Messages.Add($"Мое сообщение: {MessageInput}");
+                    MessageInput = "";
+                });
                 OnPropertyChanged(nameof(MessageInput));
             }
         }

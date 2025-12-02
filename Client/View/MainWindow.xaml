@@ -21,7 +21,7 @@
             <TextBlock x:Name="OnlineCounter"
                        Text="{Binding OnlineUsers}"
                        Foreground="LightGreen" FontSize="14" FontWeight="SemiBold"
-                       VerticalAlignment="Center" Margin="0,0,15,0"
+                       VerticalAlignment="Center" Margin="10"
                        DockPanel.Dock="Right"/>
         </DockPanel>
 
@@ -31,16 +31,7 @@
                  Background="White" BorderBrush="#d1d1d1" BorderThickness="1"
                  Padding="10"
                  FontSize="14">
-            <ListBox.ItemContainerStyle>
-                <Style TargetType="ListBoxItem">
-                    <Setter Property="Margin" Value="0,5,0,5"/>
-                    <Setter Property="Padding" Value="8"/>
-                    <Setter Property="Background" Value="#e9f5ff"/>
-                    <Setter Property="BorderBrush" Value="#cce4ff"/>
-                    <Setter Property="BorderThickness" Value="1"/>
-                    <!--<Setter Property="CornerRadius" Value="6"/>-->
-                </Style>
-            </ListBox.ItemContainerStyle>
+            
         </ListBox>
 
         
@@ -52,11 +43,13 @@
                      BorderBrush="#2b5278" BorderThickness="2"
                      VerticalContentAlignment="Center"
                      Margin="0,0,10,0"/>
-            <Button Content="Отправить" Width="120" Height="40"
+            <Button Width="120" Height="40"
                     Click="SendMessageClick"
                     Background="#2b5278" Foreground="White"
-                    FontWeight="Bold" BorderThickness="0"
-                    Cursor="Hand" IsDefault="True"/>
+                    FontWeight="Bold" BorderThickness="0" 
+                    Cursor="Hand" IsDefault="True">
+                <Image Source="send.png" Width="Auto" Height="Auto"/>
+            </Button>
         </StackPanel>
         
     </Grid>

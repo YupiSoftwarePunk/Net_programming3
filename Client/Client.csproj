@@ -8,4 +8,12 @@
     <UseWPF>true</UseWPF>
   </PropertyGroup>
 
+  <ItemGroup>
+    <None Remove="send.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="send.png" />
+  </ItemGroup>
+
 </Project>
