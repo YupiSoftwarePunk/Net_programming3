@@ -18,10 +18,13 @@
             <TextBlock Text="Чат" 
                        Foreground="White" FontSize="18" FontWeight="Bold"
                        VerticalAlignment="Center" Margin="15,0,0,0"/>
+            <TextBlock Text="{Binding UserName}"
+                       Foreground="LightBlue" FontSize="14" FontWeight="SemiBold"
+                       VerticalAlignment="Center" Margin="10,0,0,0"/>
             <TextBlock x:Name="OnlineCounter"
                        Text="{Binding OnlineUsers}"
                        Foreground="LightGreen" FontSize="14" FontWeight="SemiBold"
-                       VerticalAlignment="Center" Margin="10"
+                       VerticalAlignment="Center" Margin="20,0,0,0"
                        DockPanel.Dock="Right"/>
         </DockPanel>
 
@@ -30,6 +33,7 @@
                  Grid.Row="1" Margin="10"
                  Background="White" BorderBrush="#d1d1d1" BorderThickness="1"
                  Padding="10"
+                 ItemsSource="{Binding Messages}"
                  FontSize="14">
             
         </ListBox>
@@ -43,12 +47,12 @@
                      BorderBrush="#2b5278" BorderThickness="2"
                      VerticalContentAlignment="Center"
                      Margin="0,0,10,0"/>
-            <Button Width="120" Height="40"
+            <Button Content="Отправить" Width="120" Height="40"
                     Click="SendMessageClick"
                     Background="#2b5278" Foreground="White"
                     FontWeight="Bold" BorderThickness="0" 
-                    Cursor="Hand" IsDefault="True">
-                <Image Source="send.png" Width="Auto" Height="Auto"/>
+                    Cursor="Hand" IsDefault="True" >
+                <!--<Image Source="send.png" Width="40" Height="40"/>-->
             </Button>
         </StackPanel>
         

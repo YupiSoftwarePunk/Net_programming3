@@ -24,10 +24,20 @@ namespace Client.View
     {
 
         private readonly UdpClientService udpService;
-        private int onlineUsers;
-        private readonly string userName;
+
+        private string onlineUsers = "Пользователей онлайн: 0";
+        public string UserName { get; }
+
+
+        private static readonly string[] AvailableNames = new[]
+        {
+            "Пельмень 1", "Пельмень 2", "Пельмень 3", "Пельмень 4", "Пельмень 5", "Тапок",
+            "Тюлень", "405 база", "Крутой чувак", "Вареник 1", "Вареник 2", "Дядя Женя",
+            "Лебовски", "Просто чувак", "Найсик", "ИГОООООРЬ!!!", "Проходимец", "Йоу"
+        };
 
         public ObservableCollection<string> Messages { get; } = new();
+        public ObservableCollection<string> OnlineUserNames { get; } = new();
         public ICommand SendMessageCommand { get; }
         private string messageInput = "";
         public string MessageInput
@@ -36,37 +46,26 @@ namespace Client.View
             set { messageInput = value; OnPropertyChanged(); }
         }
 
+        public string OnlineUsers
+        {
+            get => onlineUsers;
+            set { onlineUsers = value; OnPropertyChanged(); }
+        }
+
 
         public MainWindow()
         {
             InitializeComponent();
             DataContext = this;
 
-            userName = Guid.NewGuid().ToString().Substring(0, 5);
-            udpService = new UdpClientService("192.168.31.146", 8080, userName);
+            Random random = new Random();
+            UserName = AvailableNames[random.Next(AvailableNames.Length)];
+
+            udpService = new UdpClientService("192.168.31.146", 8080, UserName);
             udpService.MessageReceived += OnMessageReceived;
             _ = udpService.ConnectAsync();
 
-            SendMessageCommand = new RelayCommand(async _ =>
-            {
-                if (!string.IsNullOrWhiteSpace(MessageInput))
-                {
-                    await udpService.SendMessage(MessageInput);
-                    Dispatcher.Invoke(() =>
-                    {
-                        Messages.Add($"Мое сообщение: {MessageInput}");
-                        MessageInput = "";
-                    });
-                    OnPropertyChanged(nameof(MessageInput));
-                }
-            });
-        }
-
-
-        public int OnlineUsers
-        {
-            get => onlineUsers;
-            set { onlineUsers = value; OnPropertyChanged(); }
+            Closing += async (_, __) => await udpService.DisconnectAsync();
         }
 
 
@@ -74,15 +73,17 @@ namespace Client.View
         {
             Dispatcher.Invoke(() =>
             {
-                Messages.Add(message);
+                if (message.StartsWith("USERS:"))
+                {
+                    OnlineUserNames.Clear();
+                    var names = message.Substring(7).Split(',');
+                    foreach (var n in names)
+                        if (!string.IsNullOrWhiteSpace(n))
+                        {
+                            OnlineUserNames.Add(n); 
+                        }
 
-                if (message.EndsWith("ONLINE"))
-                {
-                    OnlineUsers++;
-                }
-                else if (message.EndsWith("OFFLINE"))
-                {
-                    OnlineUsers = Math.Max(0, OnlineUsers - 1);
+                    OnlineUsers = $"Пользователей онлайн: {OnlineUserNames.Count}";
                 }
                 else if (message.StartsWith("MSG:"))
                 {
@@ -91,23 +92,18 @@ namespace Client.View
                     {
                         string sender = parts[1];
                         string content = parts[2];
-
-                        if (sender == userName)
-                        {
-                            Messages.Add($"Я: {content}");
-                        }
-
-                        else
-                        {
-                            Messages.Add($"{sender}: {content}");
-                        }
+                        Messages.Add(sender == UserName ? $"Я: {content}" : $"{sender}: {content}");
                     }
                 }
                 else
                 {
-                    Messages.Add(message); 
+                    Messages.Add(message);
                 }
 
+                if (MessagesList.Items.Count > 0)
+                {
+                    MessagesList.ScrollIntoView(MessagesList.Items[^1]); 
+                }
             });
         }
 
@@ -117,23 +113,19 @@ namespace Client.View
             await udpService.DisconnectAsync();
         }
 
-        public event PropertyChangedEventHandler? PropertyChanged;
-        private void OnPropertyChanged([CallerMemberName] string? name = null)
-            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
-
-        public void SendMessageClick(object sender, RoutedEventArgs e)
+        public async void SendMessageClick(object sender, RoutedEventArgs e)
         {
             if (!string.IsNullOrWhiteSpace(MessageInput))
             {
-                _ = udpService.SendMessage(MessageInput);
-                Dispatcher.Invoke(() =>
-                {
-                    Messages.Add($"Мое сообщение: {MessageInput}");
-                    MessageInput = "";
-                });
-                OnPropertyChanged(nameof(MessageInput));
+                await udpService.SendMessage(MessageInput);
+                MessageInput = "";
             }
         }
+
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+        private void OnPropertyChanged([CallerMemberName] string? name = null)
+            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 }

@@ -22,6 +22,7 @@ namespace server
             udp = new UdpClient(port);
         }
 
+
         public async Task StartAsync()
         {
             Console.WriteLine($"UDP сервер слушает порт {port}.");
@@ -41,112 +42,103 @@ namespace server
                 var remote = result.RemoteEndPoint;
                 var message = Encoding.UTF8.GetString(result.Buffer);
 
-                _ = ReceivedMessage(remote, message);
+                _ = Task.Run(() => ReceivedMessage(remote, message));
             }
         }
+
 
         private async Task ReceivedMessage(IPEndPoint sender, string message)
         {
             if (string.IsNullOrWhiteSpace(message))
-            { 
+            {
                 return; 
             }
 
-            if (message.StartsWith("HELLO:", StringComparison.Ordinal))
+            if (message.StartsWith("HELLO:"))
             {
-                var name = message.Substring(6).Trim();
-                bool added = false;
+                string name = message.Substring(6).Trim();
+
+                bool nameIsTaken;
+                lock (locker)
+                {
+                    nameIsTaken = clients.Any(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+                    var existing = clients.FirstOrDefault(c => c.Name == name);
+                    if (existing != null)
+                    {
+                        clients.Remove(existing);
+                        Console.WriteLine($"Заменяем старый endpoint для {name}");
+                    }
+
+                    clients.Add(new ClientInfo(name, sender));
+                }
+
+                Console.WriteLine($"{name} подключился");
+                await SendUsers();
+                await SendMessage($"{name} ONLINE");
+            }
+            else if (message.StartsWith("BYE:"))
+            {
+                string name = message.Substring(4).Trim();
 
                 lock (locker)
                 {
-                    if (!clients.Any(c => c.EndPoint.Equals(sender)))
-                    {
-                        clients.Add(new ClientInfo(name, sender));
-                        added = true;
-                    }
+                    clients.RemoveAll(c => c.Name == name);
                 }
 
-                if (added)
-                {
-                    Console.WriteLine($"{name} подключился ({sender}).");
-                    await SendMessage($"{name} ONLINE");
-                }
-                else
-                {
-                    return;
-                }
-                
+                Console.WriteLine($"{name} отключился");
+                await SendUsers();
+                await SendMessage($"{name} OFFLINE");
             }
-
-            if (message.StartsWith("BYE:", StringComparison.Ordinal))
+            else if (message.StartsWith("MSG:"))
             {
-                var name = message.Substring(4).Trim();
-                bool removed = false;
-
-                lock (locker)
-                {
-                    var client = clients.FirstOrDefault(c => c.EndPoint.Equals(sender));
-                    if (client != null)
-                    {
-                        clients.Remove(client);
-                        removed = true;
-                    }
-                }
-
-                if (removed)
-                {
-                    Console.WriteLine($"{name} отключился ({sender}).");
-                    await SendMessage($"{name} OFFLINE");
-                }
-                else
-                {
-                    return;
-                }
-            }
-
-            if (message.StartsWith("MSG:", StringComparison.Ordinal))
-            {
-                var parts = message.Split(':', 3);
-                if (parts.Length == 3)
-                {
-                    var name = parts[1];
-                    var text = parts[2];
-
-                    Console.WriteLine($"[{name}] : {text}");
-                    await SendMessage($"MSG:{name}:{text}");
-                    return;
-                }
-                else
-                {
-                    Console.WriteLine($"Неверный формат MSG от {sender}: {message}");
-                    return;
-                }
+                Console.WriteLine($"Сообщение: {message}");
+                await SendMessage(message);
             }
             else
             {
-                Console.WriteLine($"Неизвестный пакет от {sender}: {message}");
+                Console.WriteLine($"Неизвестный пакет: {message}");
             }
         }
 
-        private async Task SendMessage(string message)
-        {
-            byte[] payload = Encoding.UTF8.GetBytes(message);
-            List<IPEndPoint> targets;
 
+
+        private async Task SendUsers()
+        {
+            List<ClientInfo> clientsCopy;
             lock (locker)
             {
-                targets = clients.Select(c => c.EndPoint).ToList();
+                clientsCopy = clients.ToList();
             }
 
-            foreach (var endpoint in targets)
+            string users = string.Join(",", clientsCopy.Select(c => c.Name));
+            await SendMessage($"USERS:{users}");
+        }
+
+
+        private async Task SendMessage(string message, string? excludeName = null)
+        {
+            byte[] data = Encoding.UTF8.GetBytes(message);
+
+            List<ClientInfo> clientsCopy;
+            lock (locker)
             {
+                clientsCopy = clients.ToList();
+            }
+
+            foreach (var client in clientsCopy)
+            {
+                if (excludeName != null && client.Name == excludeName)
+                {
+                    continue; 
+                }
+
                 try
                 {
-                    await udp.SendAsync(payload, payload.Length, endpoint);
+                    await udp.SendAsync(data, data.Length, client.EndPoint);
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Ошибка рассылки {endpoint}: {ex.Message}");
+                    Console.WriteLine($"Ошибка отправки {client.Name}: {ex.Message}");
                 }
             }
         }
